@@ -6,7 +6,7 @@ module ScreenRecorder
   class Common
     PROCESS_TIMEOUT = 5 # Seconds to wait for ffmpeg to quit
 
-    attr_reader :options, :video
+    attr_reader :options, :video, :lag
 
     def initialize(input:, output:, advanced: {})
       raise Errors::DependencyNotFound unless ffmpeg_exists?
@@ -61,6 +61,12 @@ module ScreenRecorder
       File.delete options.output
     end
 
+    def process_time
+      return unless @process_start_time && @process_end_time
+
+      @process_end_time - @process_start_time
+    end
+
     alias delete discard
 
     private
@@ -70,7 +76,9 @@ module ScreenRecorder
     # the given options.
     #
     def start_ffmpeg
+      @process_start_time = Time.now
       process = execute_command(ffmpeg_command, options.log)
+
       sleep(1.5) # Takes ~1.5s to initialize ffmpeg
       # Check if it exited unexpectedly
       raise FFMPEG::Error, "Failed to start ffmpeg. Reason: #{lines_from_log(:last, 2)}" if process.exited?
@@ -83,6 +91,7 @@ module ScreenRecorder
     # Forcefully terminates it if it takes more than 5s.
     #
     def stop_ffmpeg
+      @process_end_time = Time.now
       @process.io.stdin.puts 'q' # Gracefully exit ffmpeg
       @process.io.stdin.close
       @log_file.close
